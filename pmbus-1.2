@@ -1,0 +1,239 @@
+#!/bin/bash
+# Script Name: pmbus
+# Program:
+#	This scripts used to test pmbus function.
+#	Designed to control both remote and local server.
+# Author: Lester 	Email: clean_diver@163.com
+# 			Git: https://github.com/beta-u
+# History: 2017.3.28 10:29:00
+# Version: V1.2(Beta)
+# Update: ADD remote server control
+# Note: Any question, ask author for help!
+
+function blank(){
+	echo "-----------------------------"
+}
+
+function help(){
+
+	echo "Usage:	pmbus [-r | --remote ]  Performing remote control"	
+	echo "	pmbus [-q | --query  ]	Query current power"
+	echo "	pmbus [-s | --set    ] 	Limit power"
+	echo "	pmbus [-l | --list   ]	Query power limit"
+	echo "	pmbus [-d | --default]	Reset power to default"
+	echo "	pmbus [-h | --help   ]  Show this message"
+	echo 
+	exit 0
+}
+
+function remote(){
+	case $2 in 
+	"-q")
+		value=`ipmitool -I lanplus -H $1 -U admin -P admin -b 0x06 -t 0x2c raw 0x2e 0xc8 0x57 0x01 0x00 0x01 0x00 0x01`
+		value_1=`echo $value | cut -d' ' -f4 | tr [a-z] [A-Z]`
+		value_2=`echo $value | cut -d' ' -f5`
+		value_3=`echo "ibase=16; $value_1" | bc`
+		value_4=`echo "ibase=16; $value_2" | bc`
+		power=$((value_3 + value_4*256))
+		blank
+		echo -e "\033[33mCurrent power is $power W! \033[0m"
+		blank
+		;;
+	"-s")
+		read -p "Please enter your max total-power in 10 hex: " maxp
+		blank
+		echo -e "\033[31mYour power limit will be limit to $((maxp*8/10)) W \033[0m"
+		blank
+		plimit=$(echo "obase=16; $((maxp*8/10))" | bc) 
+		length=`echo $plimit | wc -L`
+		if [ $length == 3 ];then
+			a=`echo ${plimit:0:1}`
+			b=`echo ${plimit:1:2}`
+		elif [ $length == 2 ];then
+			a=00
+            b=`echo $plimit`
+		else
+			blank
+			echo -e "\033[31m For unknow reason, operation aborted! Ask author for help!\033[0m"
+			blank
+			break
+		fi
+		ipmitool -I lanplus -H $1 -U admin -P admin -b 0x06 -t 0x2c raw 0x2e 0xd0 0x57 0x01 0x00 0x00 0x$b 0x$a
+		blank
+		echo -e "\033[31mPower limited successfully! \033[0m"
+		blank
+		;;
+	"-l")
+		value=`ipmitool -I lanplus -H $1 -U admin -P admin -b 0x06 -t 0x2c raw 0x2e 0xd1 0x57 0x01 0x00 0x00`
+		value_1=`echo $value | cut -d' ' -f4 | tr [a-z] [A-Z]`
+		value_2=`echo $value | cut -d' ' -f5`
+		value_3=`echo "ibase=16; $value_1" | bc`
+		value_4=`echo "ibase=16; $value_2" | bc`
+		power=$((value_3 + value_4*256))	
+		if [ $power == 0 ];then
+			blank
+			echo -e "\033[31mYour power has no limit!\033[0m"
+			blank
+		else
+			blank
+			echo -e "\033[31mPower limit in 10 hex is $power. \033[0m"
+			echo -e "\033[31mPower limit in 16 hex is $value_2$value_1 \033[0m"
+			blank
+		fi
+		;;
+	"-d")
+		blank
+		echo -e "\033[31mWARNING!\nYour power limit will discard immediately! \033[0m"
+		blank
+		read -p "This operation will restore your setting to default, enter 'ABORT' to abort, any other key to continue: " go
+		if [ "$go" == "ABORT" ];then
+			break
+		fi
+		ipmitool -I lanplus -H $1 -U admin -P admin -b 0x06 -t 0x2c raw 0x2e 0xdf 0x57 0x01 0x00 0x02
+		blank
+		echo -e "\033[31mReset finished \033[0m"
+		blank
+		;;
+	esac
+}
+
+if [ "$1" == "" ];then
+	help
+	break
+fi
+
+while getopts "rqsldh" options
+do
+	case $options in
+	r)
+		echo 
+#		read -p "Enter the ip-addr: " serverip
+		serverip="100.2.37.201"
+		while true
+		do
+			echo 
+			blank
+			echo -e "\033[31m1. Query current power \033[0m"
+			echo -e "\033[31m2. Limit power \033[0m"
+			echo -e "\033[31m3. Query power limit \033[0m"
+			echo -e "\033[31m4. Cancel power limit \033[0m"
+#			echo
+#			echo -e "\033[31mEnter 'exit' to quit!"
+			blank
+			echo
+			read -p "Enter the number of action you want to execute: " action
+			case $action in 
+			"1")
+				check="-q"
+				;;
+			"2")
+				check="-s"
+				;;
+			"3")
+				check="-l"
+				;;
+			"4")
+				check="-d"
+				;;
+			"exit")
+				blank
+				echo -e "\033[31mProgram terminated! \033[0m"
+				blank
+				break
+				;;
+			*)
+				blank
+				echo -e "\033[31mYou input wrong number!\n\033[0m"
+				blank
+				;;
+			esac
+			remote $serverip $check
+		done
+	;;
+	q)
+		value=`ipmitool -b 0x06 -t 0x2c raw 0x2e 0xc8 0x57 0x01 0x00 0x01 0x00 0x01`
+		value_1=`echo $value | cut -d' ' -f4 | tr [a-z] [A-Z]`
+#		echo "The forth byte is $value_1"
+		value_2=`echo $value | cut -d' ' -f5`
+#		echo "The fifth byte is $value_2"
+		value_3=`echo "ibase=16; $value_1" | bc`
+#		echo "Turn forth byte to 10 hex : $value_3"
+		value_4=`echo "ibase=16; $value_2" | bc`
+#		echo "Turn fifth byte to 10 hex : $value_4"
+		power=$((value_3 + value_4*256))
+		blank
+		echo -e "\033[31mCurrent power is $power W! \033[0m"
+		blank
+		;;
+	s)
+		read -p "Please enter your maxmum total-power in 10 hex: " maxp
+#		set p-limit=$((maxp*8/10))
+		blank
+		echo -e "\033[31m Your power limit will be limit to $((maxp*8/10)) W \033[0m"
+		blank
+		plimit=$(echo "obase=16; $((maxp*8/10))" | bc) 
+		length=`echo $plimit | wc -L`
+		if [ $length == 3 ];then
+			a=`echo ${plimit:0:1}`
+			b=`echo ${plimit:1:2}`
+		elif [ $length == 2 ];then
+			a=00
+            b=`echo $plimit`
+		else
+			blank
+			echo -e "\033[31m For unknow reason, operation aborted! Ask author for help! \033[0m"
+			blank
+			break
+		fi
+		ipmitool -b 0x06 -t 0x2c raw 0x2e 0xd0 0x57 0x01 0x00 0x00 0x${b} 0x${a}
+		blank
+		echo -e "\033[31m Power limited successfully! \033[31m"
+		blank
+		;;
+	l)
+		value=`ipmitool -b 0x06 -t 0x2c raw 0x2e 0xd1 0x57 0x01 0x00 0x00`
+		value_1=`echo $value | cut -d' ' -f4 | tr [a-z] [A-Z]`
+#		echo $value_1
+		value_2=`echo $value | cut -d' ' -f5`
+#		echo $value_2
+		value_3=`echo "ibase=16; $value_1" | bc`
+#		echo $value_3
+		value_4=`echo "ibase=16; $value_2" | bc`
+#		echo $value_4
+		power=$((value_3 + value_4*256))	
+#		echo $power
+		if [ $power == 0 ];then
+			blank
+			echo -e "\033[31m Your power has no limit! \033[0m"
+			blank
+			break
+		fi
+		blank
+		echo -e "\033[31m Power limit in 10 hex is $power. \033[0m"
+		echo -e "\033[31m Power limit in 16 hex is $value_2$value_1. \033[0m"
+		blank
+		;;
+	d)
+		blank
+		echo -e "\033[31mWARNING!\nYour power limit will discard immediately! \033[0m"
+		blank
+		read -p "This operation will restore your setting to default, enter 'ABORT' to abort, any other key to continue: " go
+		if [ "$go" == "ABORT" ];then
+			break
+		fi
+		ipmitool -b 0x06 -t 0x2c raw 0x2e 0xdf 0x57 0x01 0x00 0x02
+		blank
+		echo -e "\033[31m Reset finished! \033[0m"
+		blank
+		;;
+	h)
+		help
+		;;
+	\?)
+		help
+		;;
+	esac
+done	
+
+
+
