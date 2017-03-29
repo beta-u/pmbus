@@ -1,0 +1,154 @@
+#!/bin/bash
+# Script Name: pmbus
+# Program:
+#	This scripts used to test pmbus function.
+#	Designed to control both remote and local server.
+# Author: Lester 	Email: clean_diver@163.com
+# 			Git: https://github.com/beta-u
+# History: 2017.3.29 09:49:00
+# Version: V1.3(Final)
+# Update: 
+#	V1.3: Integrate remote and local control to one funtion
+#	V1.2: Add remote server control
+# Note: Any question, ask author for help!
+#	Old version download: ask auther for url.
+#	No copyright, free to modify or ...
+
+function blank(){
+	echo "-----------------------------"
+}
+
+function help(){
+
+	echo "Usage:	pmbus [-r | --remote ]  Performing remote control"	
+	echo "	pmbus [-l | --local  ]	Performing local control"
+#	echo "	pmbus [-s | --set    ] 	Limit power"
+#	echo "	pmbus [-l | --list   ]	Query power limit"
+#	echo "	pmbus [-d | --default]	Reset power to default"
+	echo "	pmbus [-h | --help   ]  Show this message"
+	echo 
+	exit 0
+}
+
+
+if [ "$1" == "" ];then
+	help
+	break
+fi
+
+while getopts "rlh" options
+do
+	case $options in
+	r)
+		echo 
+		read -p "Enter the ip-addr: " serverip
+		ipmitool="ipmitool -I lanplus -H $serverip -U admin -P admin"
+		;;
+	l)
+		echo
+		ipmitool="ipmitool"
+		;;
+	*)
+		help
+		break
+		;;
+	esac
+done
+
+while true
+do
+#	blank
+	echo
+	echo -e "\033[34m 1. Query current power \033[0m"
+	echo -e "\033[34m 2. Limit power \033[0m"
+	echo -e "\033[34m 3. Query power limit \033[0m"
+	echo -e "\033[34m 4. Cancel power limit \033[0m"
+	echo -e "\033[31m -. Enter 'exit' to quit!"
+#	blank
+	echo -e "\033[31m"
+	read -p "Enter the number of action you want to execute: " action
+	echo -e "\033[0m"
+	case $action in 
+		"1")
+			value=`$ipmitool -b 0x06 -t 0x2c raw 0x2e 0xc8 0x57 0x01 0x00 0x01 0x00 0x01`
+			value_1=`echo $value | cut -d' ' -f4 | tr [a-z] [A-Z]`
+			value_2=`echo $value | cut -d' ' -f5`
+			value_3=`echo "ibase=16; $value_1" | bc`
+			value_4=`echo "ibase=16; $value_2" | bc`
+			power=$((value_3 + value_4*256))
+			blank
+			echo -e "\033[33mCurrent power is $power W! \033[0m"
+			blank
+			;;
+		"2")
+			read -p "Please enter your max total-power in 10 hex: " maxp
+			blank
+			echo -e "\033[33mYour power limit will be limit to $((maxp*8/10)) W \033[0m"
+			blank
+			plimit=$(echo "obase=16; $((maxp*8/10))" | bc) 
+			length=`echo $plimit | wc -L`
+			if [ $length == 3 ];then
+				a=`echo ${plimit:0:1}`
+				b=`echo ${plimit:1:2}`
+			elif [ $length == 2 ];then
+				a=00
+		        b=`echo $plimit`
+			else
+				blank
+				echo -e "\033[31m For unknow reason, operation aborted! Ask author for help!\033[0m"
+				blank
+				break
+			fi
+			$ipmitool -b 0x06 -t 0x2c raw 0x2e 0xd0 0x57 0x01 0x00 0x00 0x$b 0x$a > /dev/null
+			blank
+			echo -e "\033[33mPower limited successfully! \033[0m"
+			blank
+			;;
+
+		"3")
+			value=`$ipmitool -b 0x06 -t 0x2c raw 0x2e 0xd1 0x57 0x01 0x00 0x00`
+			value_1=`echo $value | cut -d' ' -f4 | tr [a-z] [A-Z]`
+			value_2=`echo $value | cut -d' ' -f5`
+			value_3=`echo "ibase=16; $value_1" | bc`
+			value_4=`echo "ibase=16; $value_2" | bc`
+			power=$((value_3 + value_4*256))	
+			if [ $power == 0 ];then
+				blank
+				echo -e "\033[33mYour power has no limit!\033[0m"
+				blank
+			else
+				blank
+				echo -e "\033[33mPower limit in 10 hex is $power. \033[0m"
+				echo -e "\033[33mPower limit in 16 hex is $value_2$value_1. \033[0m"
+				blank
+			fi
+			;;
+
+		"4")
+			blank
+			echo -e "\033[31m	     WARNING!	    \033[0m"
+			echo -e "\033[31mYour power limit will discard immediately! \033[0m"
+			blank
+			read -p "Enter 'ABORT' to abort, any other key to continue: " go
+			if [ "$go" == "ABORT" ];then
+				break
+			fi
+			$ipmitool -b 0x06 -t 0x2c raw 0x2e 0xdf 0x57 0x01 0x00 0x02 > /dev/null
+			blank
+			echo -e "\033[33m>> Reset finished <<\033[0m"
+			blank
+			;;
+		"exit")
+			blank
+			echo -e "\033[31m>> Program terminated! <<\033[0m"
+			blank
+			break
+			;;
+		*)
+			blank
+			echo -e "\033[31m>> You input wrong number! <<\033[0m"
+			blank
+			;;
+	esac
+done
+
