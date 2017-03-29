@@ -1,0 +1,14 @@
+# Script Name: pmbus
+# Program:
+#	This scripts used to test pmbus function.
+#	Designed to control both remote and local server.
+# Author: Lester 	Email: clean_diver@163.com
+# 			Git: https://github.com/beta-u
+# History: 2017.3.29 09:49:00
+# Version: V1.3(Final)
+# Update: 
+#	V1.3: Integrate remote and local control to one funtion
+#	V1.2: Add remote server control
+# Note: Any question, ask author for help!
+#	Old version download: ask auther for url.
+#	No copyright, free to modify or ...
